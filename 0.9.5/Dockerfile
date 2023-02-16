@@ -17,10 +17,6 @@ RUN sed \
 COPY config/*.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/*
 
-# Copy schema-registry-ui.sh
-COPY config/schema-registry-ui.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/schema-registry-ui.sh
-
 # Configure supervisord
 COPY config/supervisor/* /etc/supervisor/conf.d/
 
