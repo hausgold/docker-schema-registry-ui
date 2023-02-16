@@ -13,9 +13,9 @@ RUN sed \
   -e 's#^\(files =\).*#\1 /etc/supervisor/conf.d/*.conf#g' \
   -i /etc/supervisord.conf
 
-# Copy avahi.sh
-COPY config/avahi.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/avahi.sh
+# Copy custom scripts
+COPY config/*.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/*
 
 # Copy schema-registry-ui.sh
 COPY config/schema-registry-ui.sh /usr/local/bin/
