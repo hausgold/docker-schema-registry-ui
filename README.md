@@ -29,7 +29,7 @@ snippet:
 
 ```yaml
 zookeeper:
-  image: wurstmeister/zookeeper
+  image: hausgold/zookeeper
   ports:
     - "2181"
 kafka:
