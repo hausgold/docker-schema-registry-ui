@@ -28,39 +28,48 @@ service up and running create a `docker-compose.yml` and insert the following
 snippet:
 
 ```yaml
-zookeeper:
-  image: hausgold/zookeeper
-  ports:
-    - "2181"
-kafka:
-  image: hausgold/kafka
-  environment:
-    # Mind the .local suffix
-    - MDNS_HOSTNAME=kafka.local
-  ports:
-    # The ports are just for you to know when configure your
-    # container links, on depended containers
-    - "9092"
-  links:
-    # Link to the ZooKeeper instance for advertising
-    - zookeeper
-schema-registry:
-  image: hausgold/schema-registry
-  environment:
-    # Mind the .local suffix
-    MDNS_HOSTNAME: schema-registry.local
-    # Defaults to zookeeper:2181
-    SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
-  links:
-    - zookeeper
-schema-registry-ui:
-  image: hausgold/schema-registry-ui
-  network_mode: bridge
-  environment:
-    # Mind the .local suffix
-    MDNS_HOSTNAME: schema-registry-ui.local
-    # Defaults to http://schema-registry.local
-    SCHEMAREGISTRY_URL: http://schema-registry.local
+version: "3"
+services:
+  kafka:
+    image: hausgold/kafka
+    environment:
+      # Mind the .local suffix
+      - MDNS_HOSTNAME=kafka.local
+    ports:
+      # The ports are just for you to know when configure your
+      # container links, on depended containers
+      - "9092"
+
+  schema-registry:
+    image: hausgold/schema-registry
+    environment:
+      # Mind the .local suffix
+      MDNS_HOSTNAME: schema-registry.local
+      # Defaults to http://0.0.0.0:8081
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      # Defaults to kafka.local:9092
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      # Set the default Apache Avro schema compatibility
+      #
+      # See: http://bit.ly/2TcpoY1
+      # See: http://bit.ly/2Hfo4wj
+      SCHEMA_REGISTRY_AVRO_COMPATIBILITY_LEVEL: full
+    ports:
+      # The ports are just for you to know when configure your
+      # container links, on depended containers
+      - "80" # CORS-enabled nginx proxy to the schema-registry
+      - "8081" # direct access to the schema-registry (no CORS)
+    links:
+      - kafka
+
+  schema-registry-ui:
+    image: hausgold/schema-registry-ui:0.9.5
+    network_mode: bridge
+    environment:
+      # Mind the .local suffix
+      MDNS_HOSTNAME: schema-registry-ui.local
+      # Defaults to http://schema-registry.local
+      SCHEMAREGISTRY_URL: http://schema-registry.local
 ```
 
 Afterwards start the service with the following command:
