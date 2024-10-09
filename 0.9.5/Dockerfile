@@ -1,5 +1,5 @@
 FROM landoop/schema-registry-ui:0.9.5
-MAINTAINER Hermann Mayer "hermann.mayer@hausgold.de"
+LABEL org.opencontainers.image.authors="containers@hausgold.de"
 
 # You can change this environment variable on run's with -e
 ENV MDNS_HOSTNAME=schema-registry-ui.local
@@ -21,7 +21,7 @@ RUN chmod +x /usr/local/bin/*
 COPY config/supervisor/* /etc/supervisor/conf.d/
 
 # Define the command to run per default
-CMD /usr/bin/supervisord -nc /etc/supervisord.conf
+CMD ["/usr/bin/supervisord", "-nc", "/etc/supervisord.conf"]
 
 # Reset the base image entrypoint
 ENTRYPOINT []
