@@ -22,14 +22,13 @@ jobs:
           - latest
           - 0.9.5
     steps:
-      - name: Prepare the virtual environment
-        uses: hausgold/actions/ci@master
+      - name: Prepare the environment
+        uses: hausgold/actions/ci@v2
         with:
           clone_token: '${{ secrets.CLONE_TOKEN }}'
           settings_secret_key: '${{ secrets.SETTINGS_SECRET_KEY }}'
           settings: '${{ github.repository }}'
-          target: ci/noop
-      - uses: actions/checkout@v4
+          target: ci/docker
 
       - name: Configure IMAGE_REF
         run: var IMAGE_REF '${{ matrix.version }}'
