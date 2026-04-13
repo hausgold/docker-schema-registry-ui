@@ -5,7 +5,7 @@ LABEL org.opencontainers.image.authors="containers@hausgold.de"
 ENV MDNS_HOSTNAME=schema-registry-ui.local
 
 # Install system packages
-RUN apk add --no-cache \
+RUN apk update && apk upgrade --no-cache && apk add --no-cache \
   dbus avahi avahi-tools supervisor bash
 
 # Reconfigure supervisord
