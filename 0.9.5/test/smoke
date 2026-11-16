@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROGNAME="$(basename "${0}")"
+
+# Print the usage of the script.
+function help()
+{
+  cat <<EOF
+Usage: ${PROGNAME} IMAGE [NAME]
+
+Run the smoke test on a built Docker image. The image is started with
+its default configuration, next to a second container of the same image
+which acts as the client. The client looks the user interface up via
+mDNS, loads its page and checks the settings it hands to the browser.
+NAME prefixes the containers and names the network of the test run, it
+defaults to schema-registry-ui-test.
+
+Eg. ${0} hausgold/schema-registry-ui:latest
+EOF
+}
+
+if [ -z "${1:-}" -o "${1:-}" = '-h' -o "${1:-}" = '--help' ]; then
+  help
+  exit 0
+fi
+
+# Print an error message and the usage to stderr, then exit.
+#
+# $1 - the error message
+function panic()
+{
+  >&2 echo "${PROGNAME}: ${1}"
+  >&2 echo -e '\n---\n'
+  >&2 help
+  exit 1
+}
+
+command -v docker >/dev/null || panic 'docker: command not found'
+
+# The Docker image to test
+IMAGE="${1}"
+# The name prefix of the containers, and the name of the network
+NAME="${2:-schema-registry-ui-test}"
+# The container which runs the default configuration
+SERVER="${NAME}-server"
+# The container which looks up and connects to the user interface
+CLIENT="${NAME}-client"
+# We use a dedicated network, so that containers of other projects cannot
+# claim the mDNS hostname of the server on the default bridge
+NETWORK="${NAME}"
+# The default of the image, as documented on the readme
+MDNS_HOSTNAME='schema-registry-ui.local'
+# The port the user interface is served on by default
+PORT=80
+# The settings which the image hands to the browser by default: the
+# registry to talk to, and the unlocked features of the user interface
+SETTINGS=(
+  'SCHEMA_REGISTRY: "http://schema-registry.local"'
+  'allowGlobalConfigChanges: true'
+  'allowTransitiveCompatibilities: true'
+  'allowSchemaDeletion: true'
+)
+# The seconds we wait for the server startup, and for the mDNS lookup
+TIMEOUT=60
+
+# Remove the containers and the network of the test run.
+function cleanup()
+{
+  docker rm --force --volumes "${SERVER}" "${CLIENT}" >/dev/null 2>&1 || true
+  docker network rm "${NETWORK}" >/dev/null 2>&1 || true
+}
+
+# Print the failed check together with the latest server logs to stderr,
+# then exit.
+#
+# $1 - the description of the failed check
+function fail()
+{
+  >&2 echo "${PROGNAME}: ${1}"
+  >&2 echo -e '\n---\n'
+  >&2 docker logs --tail 50 "${SERVER}" || true
+  exit 1
+}
+
+# Retry a command every second until it succeeds, or the timeout is
+# reached.
+#
+# $1 - the timeout in seconds
+# $@ - the command to run
+function wait-for()
+{
+  local deadline=$((SECONDS + ${1}))
+  shift
+
+  until "${@}" >/dev/null 2>&1; do
+    [ "${SECONDS}" -lt "${deadline}" ] || return 1
+    sleep 1
+  done
+}
+
+# Send a HTTP request from within a container and print the response
+# body. Error responses of the server fail the request.
+#
+# $1 - the container name
+# $2 - the URL
+function request()
+{
+  docker exec "${1}" wget -q -O - -T 10 -t 1 "${2}"
+}
+
+# Check whether the server answers on its HTTP port.
+function server-ready()
+{
+  request "${SERVER}" "http://127.0.0.1:${PORT}/"
+}
+
+# Check whether the client resolves the mDNS hostname to the address of
+# the server. We ask avahi directly, so no other name service can answer.
+function mdns-resolves()
+{
+  local address
+  address="$(
+    docker exec "${CLIENT}" avahi-resolve-host-name -4 "${MDNS_HOSTNAME}" \
+      | cut -f2
+  )"
+  [ "${address}" = "${SERVER_ADDRESS}" ]
+}
+
+# Drop the leftovers of an aborted run, and clean up after this one
+cleanup
+trap cleanup EXIT
+
+echo "Start ${IMAGE} with the default configuration"
+docker network create "${NETWORK}" >/dev/null
+docker run --detach --name "${SERVER}" --network "${NETWORK}" \
+  "${IMAGE}" >/dev/null
+wait-for "${TIMEOUT}" server-ready \
+  || fail "The server did not answer on port ${PORT}"
+
+echo "Look up ${MDNS_HOSTNAME} via mDNS"
+# The client needs its own mDNS hostname, otherwise both containers
+# would claim the default one
+docker run --detach --name "${CLIENT}" --network "${NETWORK}" \
+  --env MDNS_HOSTNAME="${CLIENT}.local" "${IMAGE}" >/dev/null
+SERVER_ADDRESS="$(docker inspect "${SERVER}" \
+  --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
+wait-for "${TIMEOUT}" mdns-resolves \
+  || fail "${MDNS_HOSTNAME} did not resolve to ${SERVER_ADDRESS}"
+
+# The image ships no mDNS name service, so a client within a container
+# cannot connect by hostname. From here on we use the address which the
+# mDNS lookup returned.
+echo "Connect to ${SERVER_ADDRESS} on port ${PORT}"
+PAGE="$(request "${CLIENT}" "http://${SERVER_ADDRESS}:${PORT}/")" \
+  || fail "The client could not connect to the server on port ${PORT}"
+grep -qi '<html' <<< "${PAGE}" \
+  || fail "The server returned an unexpected page: ${PAGE}"
+
+echo 'Check the default settings of the user interface'
+# The browser reads this file to learn where the registry is, the user
+# interface itself never talks to the registry
+LOADED="$(request "${CLIENT}" "http://${SERVER_ADDRESS}:${PORT}/env.js")" \
+  || fail 'The client could not load the settings of the user interface'
+for SETTING in "${SETTINGS[@]}"; do
+  grep -qF "${SETTING}" <<< "${LOADED}" \
+    || fail "The settings lack '${SETTING}': ${LOADED}"
+done
+
+echo 'All checks passed'

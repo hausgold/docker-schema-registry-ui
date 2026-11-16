@@ -16,11 +16,11 @@ CP ?= cp
 all:
 	# Configuration Maintenance
 	#
-	# update          Update the configuration on all image tag directories
+	# update          Update the config and tests on all image tag directories
 
 update: $(UPDATE_TAGS)
 
 $(UPDATE_TAGS): TAG=$(@:update-%=%)
 $(UPDATE_TAGS):
-	# Update the configuration for the "$(TAG)" image tag directory
-	@$(CP) -ar config/* $(TAG)/config/
+	# Update the config and tests for the "$(TAG)" image tag directory
+	@$(CP) -ar config test $(TAG)/

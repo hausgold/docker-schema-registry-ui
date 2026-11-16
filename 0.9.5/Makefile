@@ -12,6 +12,7 @@ CANONICAL_NAME ?= schema-registry-ui
 IMAGE_NAME ?= hausgold/$(CANONICAL_NAME)
 IMAGE_REF ?= 0.9.5
 IMAGE_URI := $(IMAGE_NAME):$(IMAGE_REF)
+TEST_CONTAINER_NAME ?= $(CANONICAL_NAME)-test
 
 # Host binaries
 CURL ?= curl
@@ -19,6 +20,7 @@ DOCKER ?= docker
 EXIT ?= exit
 GREP ?= grep
 SLEEP ?= sleep
+SMOKE ?= test/smoke
 TEST ?= test
 TIME ?= time
 
@@ -45,10 +47,12 @@ build: clean
 	# Build the Docker image
 	@$(TIME) $(DOCKER) build --no-cache -t "$(IMAGE_URI)" .
 
+# The test directory would satisfy the target of the same name, so make
+# would never run the recipe
+.PHONY: test
 test:
 	# Test the built Docker image
-	#
-	# Not yet implemented.
+	@$(SMOKE) "$(IMAGE_URI)" "$(TEST_CONTAINER_NAME)"
 
 publish:
 	# Push the new Docker image to the registry
